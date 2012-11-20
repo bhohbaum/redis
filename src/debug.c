@@ -700,6 +700,11 @@ void sigsegvHandler(int sig, siginfo_t *info, void *secret) {
     /* Log dump of processor registers */
     logRegisters(uc);
 
+    if (zmalloc_memory_errors() > 0) {
+        redisLog(REDIS_WARNING,
+        "\n!!! WARNING: Apparently this computer has corrupted memory !!!\n\n");
+    }
+
     redisLog(REDIS_WARNING,
 "\n=== REDIS BUG REPORT END. Make sure to include from START to END. ===\n\n"
 "       Please report the crash opening an issue on github:\n\n"

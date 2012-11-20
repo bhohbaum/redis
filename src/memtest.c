@@ -252,3 +252,61 @@ void memtest(size_t megabytes, int passes) {
     printf("2) memtester: http://pyropus.ca/software/memtester/\n");
     exit(0);
 }
+
+/* This function is designed in order to test some memory just allocated in
+ * a fast way, so that zmalloc.c, the Redis allocator, can perform online
+ * incremental memory testing to detect memory errors while the server
+ * is running.
+ *
+ * This test must be fast so we only perform a Zero-One test, and
+ * a Checkboard test (but without delays between writes and reads).
+ *
+ * The function makes sure to fill the tested memory with zero before
+ * returning to the caller, so we can use this function also with
+ * memory allocated with calloc() without making the zmalloc.c logic
+ * more complex.
+ *
+ * ptr: pointer to memory to test.
+ * size: size in bytes of the allocated memory.
+ * maxsize: the max number of bytes to test in case size > maxsize.
+ *
+ * The maxsize parameter is used in order to avoid to slowdown the function
+ * too much. If the size of the allocation is bigger than maxsize, then
+ * only a random interval of memory of maxsize bytes is tested.
+ *
+ * The function returns the number of memory errors found, so 0 is returned
+ * if the memory passed the test without problems. */
+int memtest_fast_alloc_test(void *ptr, size_t size, size_t maxsize) {
+    unsigned long *p = ptr;
+    int j, errors = 0;
+    const unsigned long cb1[2] = {ULONG_ONEZERO,ULONG_ZEROONE};
+    const unsigned long cb2[2] = {ULONG_ZEROONE,ULONG_ONEZERO};
+
+    /* We test only whole words. */
+    size /= sizeof(unsigned long);
+    maxsize /= sizeof(unsigned long);
+
+    if (size > maxsize) {
+        p += rand() % (size-maxsize); /* Test a random interval */
+        size = maxsize;
+    }
+
+    /* ZERO */
+    for (j = 0; j < size; j++) p[j] = 0;
+    for (j = 0; j < size; j++) if (p[j] != 0) errors++;
+
+    /* ONE */
+    for (j = 0; j < size; j++) p[j] = (unsigned long)-1;
+    for (j = 0; j < size; j++) if (p[j] != (unsigned long)-1) errors++;
+
+    /* CHECKBOARD #1 */
+    for (j = 0; j < size; j++) p[j] = cb1[j&1];
+    for (j = 0; j < size; j++) if (p[j] != cb1[j&1]) errors++;
+
+    /* CHECKBOARD #2 (inverted) */
+    for (j = 0; j < size; j++) p[j] = cb2[j&1];
+    for (j = 0; j < size; j++) if (p[j] != cb2[j&1]) errors++;
+
+    memset(p,0,size*sizeof(unsigned long));
+    return errors;
+}

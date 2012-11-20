@@ -39,6 +39,9 @@ void zlibc_free(void *ptr) {
     free(ptr);
 }
 
+/* From memtest.c */
+int memtest_fast_alloc_test(void *ptr, size_t size, size_t maxsize);
+
 #include <string.h>
 #include <pthread.h>
 #include "config.h"
@@ -105,7 +108,26 @@ void zlibc_free(void *ptr) {
     } \
 } while(0)
 
+/* Note that the counter working as trigger is not protected by mutex, this
+ * is because we don't care about races in this case and a mutex would be
+ * costly here. */
+#define MEM_TEST_MAX_SIZE (1024*1024)   /* 1 MB */
+#define MEM_TEST_PERIOD (1<<10)         /* 1 test every 1024 allocations */
+#define may_test_memory(ptr,size) do { \
+    memory_test_trigger++; \
+    if ((memory_test_trigger & (MEM_TEST_PERIOD-1)) == 0) { \
+        int errors =  memtest_fast_alloc_test(ptr, size, MEM_TEST_MAX_SIZE); \
+        if (zmalloc_thread_safe) pthread_mutex_lock(&used_memory_mutex); \
+        memory_errors += errors; \
+        tested_memory += (size > MEM_TEST_MAX_SIZE) ? MEM_TEST_MAX_SIZE : size;\
+        if (zmalloc_thread_safe) pthread_mutex_unlock(&used_memory_mutex); \
+    } \
+} while (0)
+
 static size_t used_memory = 0;
+static unsigned long long tested_memory = 0;
+static int memory_errors = 0;
+static unsigned int memory_test_trigger = 0;
 static int zmalloc_thread_safe = 0;
 pthread_mutex_t used_memory_mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -122,6 +144,7 @@ void *zmalloc(size_t size) {
     void *ptr = malloc(size+PREFIX_SIZE);
 
     if (!ptr) zmalloc_oom_handler(size);
+    may_test_memory(ptr,size+PREFIX_SIZE);
 #ifdef HAVE_MALLOC_SIZE
     update_zmalloc_stat_alloc(zmalloc_size(ptr));
     return ptr;
@@ -136,6 +159,7 @@ void *zcalloc(size_t size) {
     void *ptr = calloc(1, size+PREFIX_SIZE);
 
     if (!ptr) zmalloc_oom_handler(size);
+    may_test_memory(ptr,size+PREFIX_SIZE);
 #ifdef HAVE_MALLOC_SIZE
     update_zmalloc_stat_alloc(zmalloc_size(ptr));
     return ptr;
@@ -159,6 +183,8 @@ void *zrealloc(void *ptr, size_t size) {
     newptr = realloc(ptr,size);
     if (!newptr) zmalloc_oom_handler(size);
 
+    if (size > oldsize)
+        may_test_memory((char*)newptr+oldsize,size-oldsize);
     update_zmalloc_stat_free(oldsize);
     update_zmalloc_stat_alloc(zmalloc_size(newptr));
     return newptr;
@@ -168,6 +194,8 @@ void *zrealloc(void *ptr, size_t size) {
     newptr = realloc(realptr,size+PREFIX_SIZE);
     if (!newptr) zmalloc_oom_handler(size);
 
+    if (size > oldsize)
+        may_test_memory((char*)newptr+oldsize+PREFIX_SIZE,size-oldsize);
     *((size_t*)newptr) = size;
     update_zmalloc_stat_free(oldsize);
     update_zmalloc_stat_alloc(size);
@@ -230,8 +258,35 @@ size_t zmalloc_used_memory(void) {
     else {
         um = used_memory;
     }
-
     return um;
+}
+
+int zmalloc_memory_errors(void) {
+    int me;
+
+    if (zmalloc_thread_safe) {
+        pthread_mutex_lock(&used_memory_mutex);
+        me = memory_errors;
+        pthread_mutex_unlock(&used_memory_mutex);
+    }
+    else {
+        me = memory_errors;
+    }
+    return me;
+}
+
+unsigned long long zmalloc_tested_memory(void) {
+    unsigned long long tm;
+
+    if (zmalloc_thread_safe) {
+        pthread_mutex_lock(&used_memory_mutex);
+        tm = tested_memory;
+        pthread_mutex_unlock(&used_memory_mutex);
+    }
+    else {
+        tm = tested_memory;
+    }
+    return tm;
 }
 
 void zmalloc_enable_thread_safeness(void) {
