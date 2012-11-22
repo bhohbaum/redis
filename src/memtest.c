@@ -287,7 +287,7 @@ int memtest_fast_alloc_test(void *ptr, size_t size, size_t maxsize) {
     maxsize /= sizeof(unsigned long);
 
     if (size > maxsize) {
-        p += rand() % (size-maxsize); /* Test a random interval */
+        p += rand() % (size-maxsize+1); /* Test a random interval */
         size = maxsize;
     }
 
