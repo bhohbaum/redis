@@ -26,4 +26,10 @@ redis-cli -h 192.168.6.64 -p 6382 cluster meet 192.168.6.64 6381
 redis-cli -h 192.168.6.64 -p 6382 cluster meet 192.168.6.64 6382
 
 
+# we leave the slaves to autodiscovery...
+
+redis-cli -h 192.168.6.64 -p 6382 cluster meet 192.168.6.64 6389
+redis-cli -h 192.168.6.64 -p 6382 cluster meet 192.168.6.64 6390
+redis-cli -h 192.168.6.64 -p 6382 cluster meet 192.168.6.64 6391
+redis-cli -h 192.168.6.64 -p 6382 cluster meet 192.168.6.64 6392
 
