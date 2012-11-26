@@ -89,6 +89,8 @@ int clusterLoadConfig(char *filename) {
             if (p) *p = '\0';
             if (!strcasecmp(s,"myself")) {
                 redisAssert(server.cluster.myself == NULL);
+                strcpy(n->ip, server.bindaddr);
+                n->port = server.port;
                 server.cluster.myself = n;
                 n->flags |= REDIS_NODE_MYSELF;
             } else if (!strcasecmp(s,"master")) {
@@ -463,7 +465,7 @@ void clusterProcessGossipSection(clusterMsg *hdr, clusterLink *link) {
             }
             /* Mark this node as FAILED if we think it is possibly failing
              * and another node also thinks it's failing. */
-            if (node->flags & REDIS_NODE_PFAIL &&
+            if ((node->flags & REDIS_NODE_PFAIL) &&
                 (flags & (REDIS_NODE_FAIL|REDIS_NODE_PFAIL)))
             {
                 redisLog(REDIS_NOTICE,"Received a PFAIL acknowledge from node %.40s, marking node %.40s as FAIL!", hdr->sender, node->name);
@@ -873,8 +875,8 @@ void clusterSendPing(clusterLink *link, int type) {
 
         /* Not interesting to gossip about ourself.
          * Nor to send gossip info about HANDSHAKE state nodes (zero info). */
-        if (this == server.cluster.myself ||
-            this->flags & REDIS_NODE_HANDSHAKE) {
+        if ((this == server.cluster.myself) ||
+            (this->flags & REDIS_NODE_HANDSHAKE)) {
                 freshnodes--; /* otherwise we may loop forever. */
                 continue;
         }
@@ -1064,12 +1066,12 @@ void clusterCron(void) {
              * FAIL node. */
             if (node->flags & REDIS_NODE_PFAIL) {
                 node->flags &= ~REDIS_NODE_PFAIL;
-            } else if (node->flags & REDIS_NODE_FAIL && !node->numslaves) {
+            } else if ((node->flags & REDIS_NODE_FAIL) && !(node->numslaves)) {
                 node->flags &= ~REDIS_NODE_FAIL;
                 clusterUpdateState();
             }
         } else {
-            /* Timeout reached. Set the noad se possibly failing if it is
+            /* Timeout reached. Set the node to possibly failing if it is
              * not already in this state. */
             if (!(node->flags & (REDIS_NODE_PFAIL|REDIS_NODE_FAIL))) {
                 redisLog(REDIS_DEBUG,"*** NODE %.40s possibly failing",
@@ -1141,8 +1143,8 @@ void clusterUpdateState(void) {
     int j;
 
     for (j = 0; j < REDIS_CLUSTER_SLOTS; j++) {
-        if (server.cluster.slots[j] == NULL ||
-            server.cluster.slots[j]->flags & (REDIS_NODE_FAIL))
+        if ((server.cluster.slots[j] == NULL) ||
+            (server.cluster.slots[j]->flags & (REDIS_NODE_FAIL)))
         {
             ok = 0;
             break;
@@ -1632,7 +1634,7 @@ void restoreCommand(redisClient *c) {
  * This sockets are closed when the max number we cache is reached, and also
  * in serverCron() when they are around for more than a few seconds. */
 #define MIGRATE_SOCKET_CACHE_ITEMS 64 /* max num of items in the cache. */
-#define MIGRATE_SOCKET_CACHE_TTL 10 /* close cached socekts after 10 sec. */
+#define MIGRATE_SOCKET_CACHE_TTL 10 /* close cached sockets after 10 sec. */
 
 typedef struct migrateCachedSocket {
     int fd;
@@ -1989,8 +1991,8 @@ clusterNode *getNodeByQuery(redisClient *c, struct redisCommand *cmd, robj **arg
      * another instance, so we'll accept the query even if in the table
      * it is assigned to a different node, but only if the client
      * issued an ASKING command before. */
-    if (server.cluster.importing_slots_from[slot] != NULL &&
-        c->flags & REDIS_ASKING) {
+    if ((server.cluster.importing_slots_from[slot] != NULL) &&
+        (c->flags & REDIS_ASKING)) {
         return server.cluster.myself;
     }
     /* It's not a -ASK case. Base case: just return the right node. */
