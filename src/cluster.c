@@ -212,8 +212,6 @@ void clusterSaveConfigOrDie(void) {
 }
 
 void clusterInit(void) {
-    int saveconf = 0;
-
     server.cluster.myself = NULL;
     server.cluster.state = REDIS_CLUSTER_FAIL;
     server.cluster.nodes = dictCreate(&clusterNodesDictType,NULL);
@@ -231,9 +229,8 @@ void clusterInit(void) {
         redisLog(REDIS_NOTICE,"No cluster configuration found, I'm %.40s",
             server.cluster.myself->name);
         clusterAddNode(server.cluster.myself);
-        saveconf = 1;
     }
-    if (saveconf) clusterSaveConfigOrDie();
+    clusterSaveConfigOrDie();
     /* We need a listening TCP port for our cluster messaging needs */
     server.cfd = anetTcpServer(server.neterr,
             server.port+REDIS_CLUSTER_PORT_INCR, server.bindaddr);
