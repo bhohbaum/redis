@@ -763,6 +763,7 @@ void configGetCommand(redisClient *c) {
     config_get_string_field("unixsocket",server.unixsocket);
     config_get_string_field("logfile",server.logfile);
     config_get_string_field("pidfile",server.pidfile);
+    config_get_string_field("cluster-config-file",server.cluster.configfile);
 
     /* Numerical values */
     config_get_numerical_field("maxmemory",server.maxmemory);

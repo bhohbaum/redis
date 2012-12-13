@@ -91,8 +91,13 @@ int clusterLoadConfig(char *filename) {
                 redisAssert(server.cluster.myself == NULL);
                 strcpy(n->ip, server.bindaddr);
                 n->port = server.port;
-                server.cluster.myself = n;
                 n->flags |= REDIS_NODE_MYSELF;
+                if (argv[3][0] != '-') {
+                	n->flags |= REDIS_NODE_SLAVE;
+				} else {
+					n->flags |= REDIS_NODE_MASTER;
+				}
+                server.cluster.myself = n;
             } else if (!strcasecmp(s,"master")) {
                 n->flags |= REDIS_NODE_MASTER;
             } else if (!strcasecmp(s,"slave")) {
